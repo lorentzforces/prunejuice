@@ -1,6 +1,8 @@
 package run
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +13,11 @@ import (
 
 func FailOut(msg string) {
 	fmt.Fprintln(os.Stderr, ErrMsg(msg))
+	os.Exit(1)
+}
+
+func CleanFailOut(msg string) {
+	fmt.Fprintln(os.Stderr, msg)
 	os.Exit(1)
 }
 
@@ -72,4 +79,21 @@ func MoveFile(srcPath, destPath string) error {
 	}
 
 	return nil
+}
+
+
+var ErrorUserDeclined = errors.New("User declined to continue")
+
+// Print a message to stderr for the user to consider, then ask them to confirm using standard y/n
+// to continue. If the user agrees, returns nil. Otherwise returns ErrorUserDeclined.
+func PromptConfirm(prompt string) error {
+	fmt.Fprintln(os.Stderr, prompt)
+	fmt.Fprint(os.Stderr, "Continue with this operation? n/Y: ")
+	inputScanner := bufio.NewScanner(os.Stdin)
+	inputScanner.Scan()
+	userChoice := inputScanner.Text()
+	if userChoice == "Y" {
+		return nil
+	}
+	return ErrorUserDeclined
 }

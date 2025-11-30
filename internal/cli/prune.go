@@ -6,14 +6,17 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/lorentzforces/prunejuice/internal/run"
 	"github.com/spf13/cobra"
 )
 
 const (
 	optionPrintOnly = "print-only"
 	optionKeepN = "keep"
+	optionNoConfirm = "no-confirm"
 )
 
 func CreateRootCmd() *cobra.Command {
@@ -43,6 +46,12 @@ func CreateRootCmd() *cobra.Command {
 			"valid value, but you should probably consider with caution if that's really what\n" +
 			"you want to use this program for.",
 	)
+	rootCmd.Flags().Bool(
+		optionNoConfirm,
+		false,
+		"If this flag is set, all confirmation checks will be treated as if the user had\n" +
+			"confirmed \"yes.\"",
+	)
 
 	return rootCmd
 }
@@ -54,7 +63,11 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("Cannot keep a negative number of files (was given %d)", keepNumber)
 	}
 	printOnly, err := cmd.Flags().GetBool(optionPrintOnly)
-	if err != nil { return fmt.Errorf("") }
+	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
+
+	shouldNotConfirm, err := cmd.Flags().GetBool(optionNoConfirm)
+	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
+	confirmSetting := confirmOrNotFromBool(!shouldNotConfirm)
 
 	if len(args) != 1 { return fmt.Errorf("Expected 1 path argument but found %d", len(args)) }
 
@@ -73,16 +86,14 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 
 
 	lastIndexToRemove := len(files) - keepNumber - 1
-	// if we already have fewer files than our minimum, bail
 	if lastIndexToRemove < 0 { return nil }
+	filesToRemove := files[0:lastIndexToRemove+1]
 
-	for i := lastIndexToRemove; i >= 0; i-- {
-		if printOnly {
-			fmt.Println(files[i].RelativePath)
-		} else {
-			// TODO: add actual delete here once I'm more confident
-			fmt.Println("WOULD DELETE " + files[i].RelativePath)
-		}
+	if printOnly {
+		fmt.Println(filesToRemove)
+	} else {
+		err = doDelete(filesToRemove, confirmSetting)
+		if err != nil { return err }
 	}
 
 	return nil
@@ -129,4 +140,35 @@ func findAllFilesInPath(pathToDir string) ([]foundDirEntry, error) {
 	}
 
 	return results, nil
+}
+
+func doDelete(files []foundDirEntry, confirmSetting confirmOrNot) error {
+	var filesPrompt strings.Builder
+	filesPrompt.WriteString("The following files will be deleted: ")
+	for _, file := range files {
+		filesPrompt.WriteString("\n  ")
+		filesPrompt.WriteString(file.RelativePath)
+	}
+
+	if confirmSetting == doConfirm {
+		err := run.PromptConfirm(filesPrompt.String())
+		if err != nil { return err }
+	}
+
+	// TODO: actually delete the stuff
+
+	return nil
+}
+
+type confirmOrNot uint8
+const (
+	doConfirm confirmOrNot = iota
+	doNotConfirm
+)
+
+func confirmOrNotFromBool(boolVal bool) confirmOrNot {
+	if boolVal {
+		return doConfirm
+	}
+	return doNotConfirm
 }

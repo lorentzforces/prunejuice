@@ -7,5 +7,8 @@ import (
 
 func main() {
 	err := cli.CreateRootCmd().Execute()
+	if err == run.ErrorUserDeclined {
+		run.CleanFailOut(err.Error())
+	}
 	run.FailOnErr(err)
 }
