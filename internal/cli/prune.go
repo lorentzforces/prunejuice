@@ -21,6 +21,7 @@ const (
 	optionSinceUnixTime = "since-unix-time"
 	optionOperateOnDirectories = "directories"
 	optionClassify = "classify"
+	optionMoveTo = "move"
 )
 
 func CreateRootCmd() *cobra.Command {
@@ -71,6 +72,12 @@ func CreateRootCmd() *cobra.Command {
 		false,
 		"Operate on directories instead of regular files",
 	)
+	rootCmd.Flags().String(
+		optionMoveTo,
+		"",
+		"Instead of deleting, remove items by moving them to the specified destination path.\n" +
+			"Destination must be a directory which already exists.",
+	)
 
 	return rootCmd
 }
@@ -99,6 +106,24 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 	operateOnDirectories, err := cmd.Flags().GetBool(optionOperateOnDirectories)
 	run.FailOnErr(err)
 	fileTypeToUse := fileTypeFromBool(operateOnDirectories)
+
+	moveDestination, err := cmd.Flags().GetString(optionMoveTo)
+	run.FailOnErr(err)
+	if len(moveDestination) > 0 {
+		destinationInfo, err := os.Stat(moveDestination)
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("Destination directory \"%s\" does not exist", moveDestination)
+		}
+		if err != nil {
+			return fmt.Errorf(
+				"Error determining destination directory \"%s\": %w",
+				moveDestination, err,
+			)
+		}
+		if !destinationInfo.IsDir() {
+			return fmt.Errorf("Destination \"%s\" exists, but is not a directory", moveDestination)
+		}
+	}
 
 	if len(args) != 1 { return fmt.Errorf("Expected 1 path argument but found %d", len(args)) }
 
@@ -142,6 +167,9 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 		doClassifyResults(files, firstIndexToKeep)
 	} else if printOnly {
 		doPrintFiles(filesToRemove)
+	} else if len(moveDestination) > 0 {
+		err = doMove(filesToRemove, moveDestination, confirmSetting)
+		if err != nil { return err }
 	} else {
 		err = doDelete(filesToRemove, confirmSetting)
 		if err != nil { return err }
@@ -223,6 +251,37 @@ func doDelete(files []foundDirEntry, confirmSetting confirmOrNot) error {
 
 	if len(errs) > 0 {
 		return fmt.Errorf("Encountered errors when deleting: %w", errors.Join(errs...))
+	}
+	return nil
+}
+
+func doMove(files []foundDirEntry, destinationPath string, confirmSetting confirmOrNot) error {
+	var filesPrompt strings.Builder
+	filesPrompt.WriteString("The following files will be moved to \"")
+	filesPrompt.WriteString(destinationPath)
+	filesPrompt.WriteString("\":")
+
+	for _, file := range files {
+		filesPrompt.WriteString("\n  ")
+		filesPrompt.WriteString(file.RelativePath)
+	}
+
+	if confirmSetting == doConfirm {
+		err := run.PromptConfirm(filesPrompt.String())
+		if err != nil { return err }
+	}
+
+	errs := make([]error, 0)
+	for _, file := range files {
+		fileDestination := path.Join(destinationPath, path.Base(file.RelativePath))
+		err := run.MoveFile(file.FullPath, fileDestination)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("Encountered errors when moving: %w", errors.Join(errs...))
 	}
 	return nil
 }
