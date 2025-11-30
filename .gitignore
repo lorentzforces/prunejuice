@@ -3,6 +3,9 @@
 prunejuice
 !cmd/prunejuice/
 
+# a spot for test files, personal scripts, etc
+local-only-files
+
 ## Linux ##
 
 *~

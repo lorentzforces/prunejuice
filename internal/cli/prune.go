@@ -18,6 +18,7 @@ const (
 	optionKeepN = "keep"
 	optionNoConfirm = "no-confirm"
 	optionSinceUnixTime = "since-unix-time"
+	optionOperateOnDirectories = "directories"
 )
 
 func CreateRootCmd() *cobra.Command {
@@ -58,6 +59,11 @@ func CreateRootCmd() *cobra.Command {
 		0, // for documentation purposes this is "no default," this value is not used if set
 		"A Unix-epoch timestamp, keep only files created at or after this time",
 	)
+	rootCmd.Flags().Bool(
+		optionOperateOnDirectories,
+		false,
+		"Operate on directories instead of regular files",
+	)
 
 	return rootCmd
 }
@@ -79,9 +85,13 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 	unixTimestamp, err := cmd.Flags().GetInt64(optionSinceUnixTime)
 	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
 
+	operateOnDirectories, err := cmd.Flags().GetBool(optionOperateOnDirectories)
+	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
+	fileTypeToUse := fileTypeFromBool(operateOnDirectories)
+
 	if len(args) != 1 { return fmt.Errorf("Expected 1 path argument but found %d", len(args)) }
 
-	files, err := findAllFilesInPath(args[0])
+	files, err := findAllFilesInPath(args[0], fileTypeToUse)
 	if err != nil { return err }
 
 	slices.SortStableFunc(files, func(l, r foundDirEntry) int {
@@ -133,7 +143,13 @@ type foundDirEntry struct {
 	ModifiedTime time.Time
 }
 
-func findAllFilesInPath(pathToDir string) ([]foundDirEntry, error) {
+type fileType uint8
+const (
+	fileTypePlainFile fileType = iota
+	fileTypeDirectory
+)
+
+func findAllFilesInPath(pathToDir string, typeToFind fileType) ([]foundDirEntry, error) {
 	fullPath, err := filepath.Abs(pathToDir)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to determine canonical path for: %s", pathToDir)
@@ -149,7 +165,8 @@ func findAllFilesInPath(pathToDir string) ([]foundDirEntry, error) {
 
 	results := make([]foundDirEntry, 0, len(dirContents))
 	for _, dirEntry := range dirContents {
-		if dirEntry.IsDir() { continue }
+		if dirEntry.IsDir() && typeToFind == fileTypePlainFile { continue }
+		if !dirEntry.IsDir() && typeToFind == fileTypeDirectory { continue }
 
 		childFileInfo, err := dirEntry.Info()
 		if err != nil {
@@ -199,6 +216,13 @@ func confirmOrNotFromBool(boolVal bool) confirmOrNot {
 		return doConfirm
 	}
 	return doNotConfirm
+}
+
+func fileTypeFromBool(boolVal bool) fileType {
+	if boolVal {
+		return fileTypeDirectory
+	}
+	return fileTypePlainFile
 }
 
 // classifier function for dir entries: for a given entry, whether or not it should be kept
