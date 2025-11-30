@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
@@ -13,6 +14,8 @@ import (
 	"github.com/lorentzforces/prunejuice/internal/run"
 	"github.com/spf13/cobra"
 )
+
+const ReleaseLabel string = "0.1.0"
 
 const (
 	optionPrintOnly = "print-only"
@@ -22,6 +25,7 @@ const (
 	optionOperateOnDirectories = "directories"
 	optionClassify = "classify"
 	optionMoveTo = "move"
+	optionVersion = "version"
 )
 
 func CreateRootCmd() *cobra.Command {
@@ -35,16 +39,12 @@ func CreateRootCmd() *cobra.Command {
 		RunE: runPruneJuice,
 	}
 
+	rootCmd.Flags().SortFlags = false
 	rootCmd.InitDefaultHelpFlag()
 	rootCmd.Flags().Bool(
-		optionPrintOnly,
+		optionVersion,
 		false,
-		"Print the names of files to be removed only - do not perform any action on them",
-	)
-	rootCmd.Flags().Bool(
-		optionClassify,
-		false,
-		"Print the name of every file found, prefixed by either REMOVE or KEEP",
+		"Print version information",
 	)
 	rootCmd.Flags().IntP(
 		optionKeepN,
@@ -55,6 +55,16 @@ func CreateRootCmd() *cobra.Command {
 			"of whether or not they would otherwise be removed. is used implicitly. Zero is a\n" +
 			"valid value, but you should probably consider with caution if that's really what\n" +
 			"you want to use this program for.",
+	)
+	rootCmd.Flags().Bool(
+		optionPrintOnly,
+		false,
+		"Print the names of files to be removed only - do not perform any action on them",
+	)
+	rootCmd.Flags().Bool(
+		optionClassify,
+		false,
+		"Print the name of every file found, prefixed by either REMOVE or KEEP",
 	)
 	rootCmd.Flags().Bool(
 		optionNoConfirm,
@@ -83,8 +93,14 @@ func CreateRootCmd() *cobra.Command {
 }
 
 func runPruneJuice(cmd *cobra.Command, args []string) error {
+	versionRequest, err := cmd.Flags().GetBool(optionVersion)
+	run.FailOnErr(err)
+	if versionRequest {
+		return printVersionInfo()
+	}
+
 	keepNumber, err := cmd.Flags().GetInt(optionKeepN)
-	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
+	run.FailOnErr(err)
 	if keepNumber < 0 {
 		return fmt.Errorf("Cannot keep a negative number of files (was given %d)", keepNumber)
 	}
@@ -334,4 +350,40 @@ func keepAtOrAfterTime(timestamp time.Time) dirEntryClassifier {
 	return func(dirEntry foundDirEntry) bool {
 		return !dirEntry.ModifiedTime.Before(timestamp)
 	}
+}
+
+func printVersionInfo() error {
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		return fmt.Errorf("Could not read self build info")
+	}
+
+	var (
+		gitRev string
+		vcsHadModifications bool
+		buildArch string
+		buildOsTarget string
+	)
+	for _, setting := range buildInfo.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			gitRev = setting.Value
+		case "vcs.modified":
+			vcsHadModifications = (setting.Value == "true")
+		case "GOARCH":
+			buildArch = setting.Value
+		case "GOOS":
+			buildOsTarget = setting.Value
+		}
+	}
+
+	fmt.Printf("prunejuice %s\n", ReleaseLabel)
+	fmt.Printf("source(git): %s", gitRev)
+	if vcsHadModifications {
+		fmt.Printf(" (in progress)")
+	}
+	fmt.Println()
+	fmt.Printf("build: %s-%s w/ %s\n", buildOsTarget, buildArch, buildInfo.GoVersion)
+
+	return nil
 }
