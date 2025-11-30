@@ -1,6 +1,5 @@
 # Requirements
 
-- specify a unix timestamp and remove any files older than said timestamp
 - specify an interval (seconds, minutes, hours, days) and remove any files older than that interval
 - switch to operate on directories (tool should probably only operate on directories or files in any single invocation, not both)
 - switch to operate based on creation date
@@ -17,3 +16,4 @@
 - allow a dry-run which only prints files to be removed (may be useful in actual usage to pipe to other programs)
 - by default operate based on modified date
 - confirm by default, switch to execute without confirmation
+- specify a unix timestamp and remove any files older than said timestamp

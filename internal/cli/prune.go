@@ -17,6 +17,7 @@ const (
 	optionPrintOnly = "print-only"
 	optionKeepN = "keep"
 	optionNoConfirm = "no-confirm"
+	optionSinceUnixTime = "since-unix-time"
 )
 
 func CreateRootCmd() *cobra.Command {
@@ -52,6 +53,11 @@ func CreateRootCmd() *cobra.Command {
 		"If this flag is set, all confirmation checks will be treated as if the user had\n" +
 			"confirmed \"yes.\"",
 	)
+	rootCmd.Flags().Int64(
+		optionSinceUnixTime,
+		0, // for documentation purposes this is "no default," this value is not used if set
+		"A Unix-epoch timestamp, keep only files created at or after this time",
+	)
 
 	return rootCmd
 }
@@ -69,6 +75,10 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
 	confirmSetting := confirmOrNotFromBool(!shouldNotConfirm)
 
+	unixTimestampProvided := cmd.Flag(optionSinceUnixTime).Changed
+	unixTimestamp, err := cmd.Flags().GetInt64(optionSinceUnixTime)
+	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
+
 	if len(args) != 1 { return fmt.Errorf("Expected 1 path argument but found %d", len(args)) }
 
 	files, err := findAllFilesInPath(args[0])
@@ -77,17 +87,35 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 	slices.SortStableFunc(files, func(l, r foundDirEntry) int {
 		if l.ModifiedTime.After(r.ModifiedTime) {
 			return 1
-		} else if r.ModifiedTime.After(l.ModifiedTime) {
+		} else if l.ModifiedTime.Before(r.ModifiedTime) {
 			return -1
 		} else {
 			return 0
 		}
 	})
 
+	keepClassifiers := make([]dirEntryClassifier, 0)
 
-	lastIndexToRemove := len(files) - keepNumber - 1
-	if lastIndexToRemove < 0 { return nil }
-	filesToRemove := files[0:lastIndexToRemove+1]
+	if unixTimestampProvided {
+		keepClassifiers = append(keepClassifiers, keepAtOrAfterUnixTime(unixTimestamp))
+	}
+
+	firstIndexToKeep := len(files)
+	ENTRY_LOOP: for i, dirEntry := range files {
+		for _, classifier := range keepClassifiers {
+			if classifier(dirEntry) {
+				firstIndexToKeep = i
+				break ENTRY_LOOP
+			}
+		}
+	}
+
+	// if our first keep index would leave us with fewer than our minimum number of entries to
+	// keep, set it lower so we still keep that backstop number
+	keepNumberBackstop := len(files) - keepNumber
+	firstIndexToKeep = min(keepNumberBackstop, firstIndexToKeep)
+
+	filesToRemove := files[0:firstIndexToKeep]
 
 	if printOnly {
 		fmt.Println(filesToRemove)
@@ -171,4 +199,17 @@ func confirmOrNotFromBool(boolVal bool) confirmOrNot {
 		return doConfirm
 	}
 	return doNotConfirm
+}
+
+// classifier function for dir entries: for a given entry, whether or not it should be kept
+type dirEntryClassifier func(foundDirEntry) bool
+
+func keepAtOrAfterUnixTime(timestamp int64) dirEntryClassifier {
+	return keepAtOrAfterTime(time.Unix(timestamp, 0))
+}
+
+func keepAtOrAfterTime(timestamp time.Time) dirEntryClassifier {
+	return func(dirEntry foundDirEntry) bool {
+		return !dirEntry.ModifiedTime.Before(timestamp)
+	}
 }
