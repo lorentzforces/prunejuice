@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -82,21 +83,21 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 	}
 
 	classifyResults, err := cmd.Flags().GetBool(optionClassify)
-	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
+	run.FailOnErr(err)
 
 	printOnly, err := cmd.Flags().GetBool(optionPrintOnly)
-	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
+	run.FailOnErr(err)
 
 	shouldNotConfirm, err := cmd.Flags().GetBool(optionNoConfirm)
-	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
+	run.FailOnErr(err)
 	confirmSetting := confirmOrNotFromBool(!shouldNotConfirm)
 
 	unixTimestampProvided := cmd.Flag(optionSinceUnixTime).Changed
 	unixTimestamp, err := cmd.Flags().GetInt64(optionSinceUnixTime)
-	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
+	run.FailOnErr(err)
 
 	operateOnDirectories, err := cmd.Flags().GetBool(optionOperateOnDirectories)
-	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
+	run.FailOnErr(err)
 	fileTypeToUse := fileTypeFromBool(operateOnDirectories)
 
 	if len(args) != 1 { return fmt.Errorf("Expected 1 path argument but found %d", len(args)) }
@@ -212,8 +213,17 @@ func doDelete(files []foundDirEntry, confirmSetting confirmOrNot) error {
 		if err != nil { return err }
 	}
 
-	// TODO: actually delete the stuff
+	errs := make([]error, 0)
+	for _, file := range files {
+		err := os.RemoveAll(file.FullPath)
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
 
+	if len(errs) > 0 {
+		return fmt.Errorf("Encountered errors when deleting: %w", errors.Join(errs...))
+	}
 	return nil
 }
 
