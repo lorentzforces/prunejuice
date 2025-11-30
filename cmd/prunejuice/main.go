@@ -1,7 +1,11 @@
 package main
 
-import "fmt"
+import (
+	"github.com/lorentzforces/prunejuice/internal/cli"
+	"github.com/lorentzforces/prunejuice/internal/run"
+)
 
 func main() {
-	fmt.Println("Pruney!")
+	err := cli.CreateRootCmd().Execute()
+	run.FailOnErr(err)
 }
