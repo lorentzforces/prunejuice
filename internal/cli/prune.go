@@ -19,6 +19,7 @@ const (
 	optionNoConfirm = "no-confirm"
 	optionSinceUnixTime = "since-unix-time"
 	optionOperateOnDirectories = "directories"
+	optionClassify = "classify"
 )
 
 func CreateRootCmd() *cobra.Command {
@@ -37,6 +38,11 @@ func CreateRootCmd() *cobra.Command {
 		optionPrintOnly,
 		false,
 		"Print the names of files to be removed only - do not perform any action on them",
+	)
+	rootCmd.Flags().Bool(
+		optionClassify,
+		false,
+		"Print the name of every file found, prefixed by either REMOVE or KEEP",
 	)
 	rootCmd.Flags().IntP(
 		optionKeepN,
@@ -74,6 +80,10 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 	if keepNumber < 0 {
 		return fmt.Errorf("Cannot keep a negative number of files (was given %d)", keepNumber)
 	}
+
+	classifyResults, err := cmd.Flags().GetBool(optionClassify)
+	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
+
 	printOnly, err := cmd.Flags().GetBool(optionPrintOnly)
 	if err != nil { return fmt.Errorf("Error while getting command line flags: %w", err) }
 
@@ -127,8 +137,10 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 
 	filesToRemove := files[0:firstIndexToKeep]
 
-	if printOnly {
-		fmt.Println(filesToRemove)
+	if classifyResults {
+		doClassifyResults(files, firstIndexToKeep)
+	} else if printOnly {
+		doPrintFiles(filesToRemove)
 	} else {
 		err = doDelete(filesToRemove, confirmSetting)
 		if err != nil { return err }
@@ -203,6 +215,23 @@ func doDelete(files []foundDirEntry, confirmSetting confirmOrNot) error {
 	// TODO: actually delete the stuff
 
 	return nil
+}
+
+func doClassifyResults(files []foundDirEntry, firstIndexToKeep int) {
+	for i, file := range files {
+		if i < firstIndexToKeep {
+			fmt.Print("REMOVE ")
+		} else {
+			fmt.Print("KEEP ")
+		}
+		fmt.Println(file.RelativePath)
+	}
+}
+
+func doPrintFiles(files []foundDirEntry) {
+	for _, file := range files {
+		fmt.Println(file.RelativePath)
+	}
 }
 
 type confirmOrNot uint8
