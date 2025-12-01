@@ -30,9 +30,9 @@ const (
 
 func CreateRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use: "prunejuice [options] dir-path",
-		Long: "prunejuice will read a given directory path and remove old files. By default, it " +
-			"will keep the 1 newest file and remove others, ignoring any directories.",
+		Use: "prunejuice [flags] dir-path",
+		Long: "prunejuice will read a given directory path and remove old files.\n" +
+			"By default, it will keep the 1 newest file and remove others, ignoring any directories.",
 		SilenceUsage: true,
 		DisableFlagsInUseLine: true,
 		SilenceErrors: true,
@@ -50,11 +50,12 @@ func CreateRootCmd() *cobra.Command {
 		optionKeepN,
 		"N",
 		1,
-		"Keep only the N newest files. If this is specified in combination with other options,\n" +
+		"Keep only the N newest files.\n" +
+			"If this is specified in combination with other options,\n" +
 			"treat this as the minimum number of files to keep and keep the N newest regardless\n" +
-			"of whether or not they would otherwise be removed. is used implicitly. Zero is a\n" +
-			"valid value, but you should probably consider with caution if that's really what\n" +
-			"you want to use this program for.",
+			"of whether or not they would otherwise be removed. is used implicitly.\n" +
+			"Zero is a valid value, but you should probably consider with caution if that's\n" +
+			"really what you want to use this program for.",
 	)
 	rootCmd.Flags().Bool(
 		optionPrintOnly,
@@ -64,7 +65,7 @@ func CreateRootCmd() *cobra.Command {
 	rootCmd.Flags().Bool(
 		optionClassify,
 		false,
-		"Print the name of every file found, prefixed by either REMOVE or KEEP",
+		"Print the name of every file considered, prefixed by either REMOVE or KEEP",
 	)
 	rootCmd.Flags().Bool(
 		optionNoConfirm,
