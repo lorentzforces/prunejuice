@@ -2,6 +2,8 @@
 
 *Violently ejecting the refuse*
 
+A small CLI tool to delete old entries from inside a directory. These might be log files, config files you generate and churn through, you get the general idea. Keep recent ones, flush the rest down the proverbial toilet.
+
 ## Building the project
 
 ### Build requirements
