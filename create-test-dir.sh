@@ -30,5 +30,7 @@ main() {
 	touch --date='1 hour ago' "$DIR_LOCATION/one_hour_ago.file"
 	touch --date='1 hour' "$DIR_LOCATION/one_hour_future.file"
 	touch --date='1 day' "$DIR_LOCATION/one_day_future.file"
+	touch --date='5 days ago' "$DIR_LOCATION/.five_day_ago_hidden.file"
+	touch --date='6 days ago' "$DIR_LOCATION/.six_day_ago_hidden.file"
 }
 main

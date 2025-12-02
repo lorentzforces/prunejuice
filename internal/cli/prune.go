@@ -22,10 +22,11 @@ const (
 	optionKeepN = "keep"
 	optionNoConfirm = "no-confirm"
 	optionSinceUnixTime = "since-unix-time"
-	optionOperateOnDirectories = "directories"
 	optionClassify = "classify"
 	optionMoveTo = "move"
 	optionVersion = "version"
+	optionOperateOnDirectories = "directories"
+	optionIncludeDotfiles = "include-dotfiles"
 )
 
 func CreateRootCmd() *cobra.Command {
@@ -60,12 +61,12 @@ func CreateRootCmd() *cobra.Command {
 	rootCmd.Flags().Bool(
 		optionPrintOnly,
 		false,
-		"Print the names of files to be removed only - do not perform any action on them",
+		"Print the names of files to be removed only - do not perform any action on them.",
 	)
 	rootCmd.Flags().Bool(
 		optionClassify,
 		false,
-		"Print the name of every file considered, prefixed by either REMOVE or KEEP",
+		"Print the name of every file considered, prefixed by either REMOVE or KEEP.",
 	)
 	rootCmd.Flags().Bool(
 		optionNoConfirm,
@@ -76,12 +77,18 @@ func CreateRootCmd() *cobra.Command {
 	rootCmd.Flags().Int64(
 		optionSinceUnixTime,
 		0, // for documentation purposes this is "no default," this value is not used if set
-		"A Unix-epoch timestamp, keep only files created at or after this time",
+		"A Unix-epoch timestamp, keep only files created at or after this time.",
 	)
 	rootCmd.Flags().Bool(
 		optionOperateOnDirectories,
 		false,
-		"Operate on directories instead of regular files",
+		"Operate on directories instead of regular files.",
+	)
+	rootCmd.Flags().Bool(
+		optionIncludeDotfiles,
+		false,
+		"Include dotfiles/hidden files (files whose names start with '.'). prunejuice will not\n" +
+			"consider these files by default.",
 	)
 	rootCmd.Flags().String(
 		optionMoveTo,
@@ -122,7 +129,9 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 
 	operateOnDirectories, err := cmd.Flags().GetBool(optionOperateOnDirectories)
 	run.FailOnErr(err)
-	fileTypeToUse := fileTypeFromBool(operateOnDirectories)
+
+	includeDotfiles, err := cmd.Flags().GetBool(optionIncludeDotfiles)
+	run.FailOnErr(err)
 
 	moveDestination, err := cmd.Flags().GetString(optionMoveTo)
 	run.FailOnErr(err)
@@ -144,7 +153,13 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 
 	if len(args) != 1 { return fmt.Errorf("Expected 1 path argument but found %d", len(args)) }
 
-	files, err := findAllFilesInPath(args[0], fileTypeToUse)
+	files, err := findAllFilesInPath(
+		args[0],
+		fileFindOptions{
+			typeToFind: fileTypeFromBool(operateOnDirectories),
+			includeDotfiles: includeDotfiles,
+		},
+	)
 	if err != nil { return err }
 
 	slices.SortStableFunc(files, func(l, r foundDirEntry) int {
@@ -201,13 +216,18 @@ type foundDirEntry struct {
 	ModifiedTime time.Time
 }
 
+type fileFindOptions struct {
+	typeToFind fileType
+	includeDotfiles bool
+}
+
 type fileType uint8
 const (
 	fileTypePlainFile fileType = iota
 	fileTypeDirectory
 )
 
-func findAllFilesInPath(pathToDir string, typeToFind fileType) ([]foundDirEntry, error) {
+func findAllFilesInPath(pathToDir string, options fileFindOptions) ([]foundDirEntry, error) {
 	fullPath, err := filepath.Abs(pathToDir)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to determine canonical path for: %s", pathToDir)
@@ -223,8 +243,11 @@ func findAllFilesInPath(pathToDir string, typeToFind fileType) ([]foundDirEntry,
 
 	results := make([]foundDirEntry, 0, len(dirContents))
 	for _, dirEntry := range dirContents {
-		if dirEntry.IsDir() && typeToFind == fileTypePlainFile { continue }
-		if !dirEntry.IsDir() && typeToFind == fileTypeDirectory { continue }
+		if dirEntry.IsDir() && options.typeToFind == fileTypePlainFile { continue }
+		if !dirEntry.IsDir() && options.typeToFind == fileTypeDirectory { continue }
+
+		isDotfile := strings.HasPrefix(dirEntry.Name(), ".")
+		if isDotfile && !options.includeDotfiles { continue }
 
 		childFileInfo, err := dirEntry.Info()
 		if err != nil {
