@@ -1,5 +1,6 @@
 # Requirements
 
+- add an option to exclude certain files based on name (either an exact name match or globbing)
 - specify an interval (seconds, minutes, hours, days) and remove any files older than that interval
 - switch to operate based on creation date
 - experiment with how much output is reasonable, and determine whether just a verbose flag is necessary or more granular controls
