@@ -58,8 +58,8 @@ func CreateRootCmd() *cobra.Command {
 		1,
 		"Keep only the N newest files.\n" +
 			"If this is specified in combination with other options,\n" +
-			"treat this as the minimum number of files to keep and keep the N newest regardless\n" +
-			"of whether or not they would otherwise be removed.\n" +
+			"treat this as the MINIMUM number of files to keep and keep the N newest regardless\n" +
+			"of whether or not they would otherwise be removed. 1 is used implicitly.\n" +
 			"Zero is a valid value, but you should probably consider with caution if that's\n" +
 			"really what you want to use this program for.",
 	)
@@ -71,7 +71,8 @@ func CreateRootCmd() *cobra.Command {
 	rootCmd.Flags().Bool(
 		optionClassify,
 		false,
-		"Print the name of every file considered, prefixed by either REMOVE or KEEP.",
+		"Print the name of every file considered, prefixed by either REMOVE or KEEP. Does not\n" +
+			"perform any action on files",
 	)
 	rootCmd.Flags().Bool(
 		optionNoConfirm,
