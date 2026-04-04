@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -27,13 +28,17 @@ const (
 	optionVersion = "version"
 	optionOperateOnDirectories = "directories"
 	optionIncludeDotfiles = "include-dotfiles"
+	optionExcludePattern = "exclude"
+	optionIncludePattern = "include"
 )
 
 func CreateRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use: "prunejuice [flags] dir-path",
 		Long: "prunejuice will read a given directory path and remove old files.\n" +
-			"By default, it will keep the 1 newest file and remove others, ignoring any directories.",
+			"By default, it will keep the 1 newest file and remove others, ignoring any directories.\n" +
+			"\n" +
+			"Patterns use the same regular expression engine as Go, described at: https://golang.org/s/re2syntax",
 		SilenceUsage: true,
 		DisableFlagsInUseLine: true,
 		SilenceErrors: true,
@@ -54,7 +59,7 @@ func CreateRootCmd() *cobra.Command {
 		"Keep only the N newest files.\n" +
 			"If this is specified in combination with other options,\n" +
 			"treat this as the minimum number of files to keep and keep the N newest regardless\n" +
-			"of whether or not they would otherwise be removed. is used implicitly.\n" +
+			"of whether or not they would otherwise be removed.\n" +
 			"Zero is a valid value, but you should probably consider with caution if that's\n" +
 			"really what you want to use this program for.",
 	)
@@ -95,6 +100,16 @@ func CreateRootCmd() *cobra.Command {
 		"",
 		"Instead of deleting, remove items by moving them to the specified destination path.\n" +
 			"Destination must be a directory which already exists.",
+	)
+	rootCmd.Flags().String(
+		optionExcludePattern,
+		"",
+		"A Golang pattern regexp pattern. Only consider files which DO NOT match the provided pattern.",
+	)
+	rootCmd.Flags().String(
+		optionIncludePattern,
+		"",
+		"A Golang pattern regexp pattern. Only consider files which DO match the provided pattern.",
 	)
 
 	return rootCmd
@@ -151,6 +166,26 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	includeStringPattern, err := cmd.Flags().GetString(optionIncludePattern)
+	run.FailOnErr(err)
+	var includeRegex *regexp.Regexp
+	if len(includeStringPattern) > 0 {
+		includeRegex, err = regexp.Compile(includeStringPattern)
+		if err != nil {
+			return fmt.Errorf("Invalid include regex: %w", err)
+		}
+	}
+
+	excludeStringPattern, err := cmd.Flags().GetString(optionExcludePattern)
+	run.FailOnErr(err)
+	var excludeRegex *regexp.Regexp
+	if len(excludeStringPattern) > 0 {
+		excludeRegex, err = regexp.Compile(excludeStringPattern)
+		if err != nil {
+			return fmt.Errorf("Invalid exclude regex: %w", err)
+		}
+	}
+
 	if len(args) != 1 { return fmt.Errorf("Expected 1 path argument but found %d", len(args)) }
 
 	files, err := findAllFilesInPath(
@@ -158,9 +193,14 @@ func runPruneJuice(cmd *cobra.Command, args []string) error {
 		fileFindOptions{
 			typeToFind: fileTypeFromBool(operateOnDirectories),
 			includeDotfiles: includeDotfiles,
+			includePattern: includeRegex,
+			excludePattern: excludeRegex,
 		},
 	)
 	if err != nil { return err }
+	if len(files) == 0 {
+		return fmt.Errorf("No files were considered.")
+	}
 
 	slices.SortStableFunc(files, func(l, r foundDirEntry) int {
 		if l.ModifiedTime.After(r.ModifiedTime) {
@@ -219,6 +259,8 @@ type foundDirEntry struct {
 type fileFindOptions struct {
 	typeToFind fileType
 	includeDotfiles bool
+	includePattern *regexp.Regexp
+	excludePattern *regexp.Regexp
 }
 
 type fileType uint8
@@ -248,6 +290,14 @@ func findAllFilesInPath(pathToDir string, options fileFindOptions) ([]foundDirEn
 
 		isDotfile := strings.HasPrefix(dirEntry.Name(), ".")
 		if isDotfile && !options.includeDotfiles { continue }
+
+		if options.excludePattern != nil && options.excludePattern.MatchString(dirEntry.Name()) {
+			continue
+		}
+
+		if options.includePattern != nil && !options.includePattern.MatchString(dirEntry.Name()) {
+			continue
+		}
 
 		childFileInfo, err := dirEntry.Info()
 		if err != nil {

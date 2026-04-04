@@ -1,8 +1,5 @@
 # Requirements
 
-- add an option to exclude certain files based on name (either an exact name match or globbing)
-- specify an interval (seconds, minutes, hours, days) and remove any files older than that interval
-- switch to operate based on creation date
 - experiment with how much output is reasonable, and determine whether just a verbose flag is necessary or more granular controls
 - perhaps include an option to consider the created/modified time on the symlink target when deciding what to do with the symlink itself
 
@@ -18,3 +15,4 @@
 - specify a unix timestamp and remove any files older than said timestamp
 - switch to operate on directories (tool should probably only operate on directories or files in any single invocation, not both)
 - switch to move items to a destination rather than delete them
+- add an option to exclude certain files based on name (either an exact name match or globbing)
