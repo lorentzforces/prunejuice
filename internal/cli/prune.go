@@ -16,7 +16,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const ReleaseLabel string = "0.1.0"
+const ReleaseLabel string = "0.2.0"
 
 const (
 	optionPrintOnly = "print-only"
